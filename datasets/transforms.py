@@ -45,7 +45,7 @@ def save_video_mp4(
     fps: int = 24,
     mean=(0.485, 0.456, 0.406),
     std=(0.229, 0.224, 0.225),
-    assume_normalized: bool | None = None,  # None=自动判断；True/False=强制
+    assume_normalized: bool | None = None,  # None=auto-detect; True/False=force
 ):
     """
     Save torch video tensor to mp4.

@@ -84,7 +84,7 @@ def visualize_concated_frames(
     pad: int = 3,
     bg_color: Tuple[int, int, int] = (0, 0, 0),
     resize_to: Optional[Tuple[int, int]] = None,
-    start_index: int = 0,           # time 的对齐的位置
+    start_index: int = 0,           # alignment position along the time axis
     text_color: Tuple[int, int, int] = (255, 0, 0),
     font_size: int = 18,
     text_pad: Tuple[int, int] = (4, 2),

@@ -190,7 +190,7 @@ if __name__ == '__main__':
             merged_visual_store_path = os.path.join(visual_store_folder_path, "instance" + str(instance_idx) + "_merged") 
             if os.path.exists(merged_visual_store_path):
                 shutil.rmtree(merged_visual_store_path)
-            merged_paths = concat_image_lists_horizontal(           # Left: ours predictions；Right: GT
+            merged_paths = concat_image_lists_horizontal(           # Left: ours predictions; Right: GT
                                                             list1 = pred_saved_paths,
                                                             list2 = gt_saved_paths,
                                                             out_dir = merged_visual_store_path,
