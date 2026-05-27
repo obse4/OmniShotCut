@@ -81,7 +81,7 @@ To this end, please use '--mode clean_shot'.
 
 Execute the inference by:
 ```shell
-python test_code/inference.py  --checkpoint_path XXX  --input_video_path XXX  --mode default
+python test_code/inference.py  --checkpoint_path checkpoints/OmniShotCut_ckpt.pth  --input_video_path XXX  --overlap_window_length 20  --mode default
 ```
 We will visualize the results by creating a folder named 'demo_video_results', where vertical bar with the same color refer to the same shot.
 
