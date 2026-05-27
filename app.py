@@ -5,11 +5,11 @@ import math
 from pathlib import Path
 from typing import Any, Dict, List, Tuple
 import cv2
-import ffmpeg
 import numpy as np
 import torch
 import tempfile
 import spaces
+from huggingface_hub import hf_hub_download
 
 # Temp file bug of gradio
 BASE_TMP_DIR = os.path.abspath("./gradio_tmp")
@@ -53,14 +53,11 @@ VIS_DIR = "demo_video_results"
 MAX_GALLERY_PAGES = 20
 
 
-# Prepare the checkpoint
-if not os.path.exists(DEFAULT_CHECKPOINT_PATH):
-    os.makedirs("checkpoints", exist_ok=True)
-    os.system("wget -P checkpoints https://huggingface.co/uva-cv-lab/OmniShotCut/resolve/main/OmniShotCut_ckpt.pth")
-
-
-# Load the model
-checkpoint_path = DEFAULT_CHECKPOINT_PATH
+# Prepare the checkpoint — download from HF Hub into local cache if not present
+checkpoint_path = hf_hub_download(
+    repo_id="uva-cv-lab/OmniShotCut",
+    filename="OmniShotCut_ckpt.pth",
+)
 model, model_args = load_model(checkpoint_path)
 
 
@@ -192,7 +189,7 @@ def run_demo(video_file):
                                                                                                     video_path = video_path,
                                                                                                     model = model,
                                                                                                     model_args = model_args,
-                                                                                                    num_context_frames = int(num_context_frames),
+                                                                                                    overlap_window_length = int(num_context_frames),
                                                                                                 )
     print("Finish running the video")
     

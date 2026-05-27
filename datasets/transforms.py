@@ -3,7 +3,6 @@ import random
 from typing import List, Union, Optional, Tuple
 from pathlib import Path
 import numpy as np
-import ffmpeg
 import torch
 import torch.utils.data
 import imageio

@@ -8,7 +8,7 @@ import math
 import subprocess
 import cv2
 import copy
-import ffmpeg
+from decord import VideoReader, cpu as decord_cpu
 import json
 import torch
 import torchvision.transforms as T
@@ -45,7 +45,7 @@ def load_model(checkpoint_path: str):
 
 
     # Load state dict
-    state_dict = torch.load(checkpoint_path, map_location="cpu")
+    state_dict = torch.load(checkpoint_path, map_location="cpu", weights_only=False)
     if "args" not in state_dict or "model" not in state_dict:
         raise ValueError("Checkpoint must contain keys: 'args' and 'model'.")
 
@@ -175,15 +175,9 @@ def single_video_inference(video_path, model, model_args, overlap_window_length)
 
 
     # Read the Video
-    fps = get_video_fps_safe(video_path)       # get_fps sometimes might have the bug
-    video_stream, err = ffmpeg.input(
-                                        video_path
-                                    ).output(
-                                        "pipe:", format = "rawvideo", pix_fmt = "rgb24", s = str(process_width) + "x" + str(process_height),  vsync = 'passthrough',
-                                    ).run(
-                                        capture_stdout = True, capture_stderr = True
-                                    )      # The resize is already included
-    video_np_full = np.frombuffer(video_stream, np.uint8).reshape(-1, process_height, process_width, 3)
+    vr = VideoReader(video_path, ctx=decord_cpu(0), width=process_width, height=process_height)
+    fps = vr.get_avg_fps()
+    video_np_full = vr[:].asnumpy()  # (T, H, W, 3), RGB
     
 
     # Iterate all the clips
