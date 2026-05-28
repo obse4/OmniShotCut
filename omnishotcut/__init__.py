@@ -9,72 +9,71 @@ from omnishotcut.engine import load_model, _run_on_numpy
 from omnishotcut.label_correspondence import unique_intra_label_mapping
 
 
-_model = None
-_model_args = None
 _DEFAULT_HF_FILENAME = "OmniShotCut_ckpt.pth"
 
 
+class OmniShotCutModel:
+
+    def __init__(self, model, model_args):
+        self._model = model
+        self._model_args = model_args
+
+    def inference(self, video, mode="clean_shot", overlap=20):
+        """Run shot cut detection on a video.
+
+        Args:
+            video: str file path | np.ndarray (T,H,W,3) uint8 RGB | torch.Tensor (T,H,W,3)
+            mode: "clean_shot" — general cuts only (no transitions)
+                  "default"    — all detected shots with full labels
+            overlap: number of overlap frames between adjacent inference windows
+
+        Returns:
+            ranges:       list of [start_frame, end_frame]
+            intra_labels: list of int (0=General, 1=Dissolve, 2=Wipes, ...)
+            inter_labels: list of int (0=New_Start, 1=Hard_Cut, 2=Transition_Source, ...)
+        """
+        if isinstance(video, str):
+            h, w = self._model_args.process_height, self._model_args.process_width
+            vr = VideoReader(video, ctx=decord_cpu(0), width=w, height=h)
+            video_np = vr[:].asnumpy()
+        elif isinstance(video, torch.Tensor):
+            if video.ndim != 4 or video.shape[-1] != 3:
+                raise ValueError(f"Tensor must be (T, H, W, 3), got {tuple(video.shape)}")
+            video_np = video.cpu().numpy()
+            if video_np.dtype != np.uint8:
+                if video_np.min() < 0.0 or video_np.max() > 1.0:
+                    raise ValueError(f"Float tensor must be in [0, 1], got range [{video_np.min():.3f}, {video_np.max():.3f}]")
+                video_np = (video_np * 255).astype(np.uint8)
+        else:
+            video_np = np.asarray(video)
+            if video_np.ndim != 4 or video_np.shape[-1] != 3:
+                raise ValueError(f"numpy array must be (T, H, W, 3), got {video_np.shape}")
+            if video_np.dtype != np.uint8:
+                if video_np.min() < 0.0 or video_np.max() > 1.0:
+                    raise ValueError(f"Float array must be in [0, 1], got range [{video_np.min():.3f}, {video_np.max():.3f}]")
+                video_np = (video_np * 255).astype(np.uint8)
+
+        ranges, intra_labels, inter_labels = _run_on_numpy(video_np, self._model, self._model_args, overlap)
+
+        if mode == "clean_shot":
+            general_idx = unique_intra_label_mapping["general"]
+            keep = [i for i, lbl in enumerate(intra_labels) if lbl == general_idx]
+            ranges = np.array(ranges)[keep].tolist() if keep else []
+            intra_labels = np.array(intra_labels)[keep].tolist() if keep else []
+            inter_labels = np.array(inter_labels)[keep].tolist() if keep else []
+
+        return ranges, intra_labels, inter_labels
+
+
 def load(checkpoint_path, filename=_DEFAULT_HF_FILENAME):
-    """Load the model weights.
+    """Load model weights and return an OmniShotCutModel instance.
 
     checkpoint_path can be:
       - a local file path  → load directly (filename ignored)
       - a HF repo ID       → download the specified filename from that repo
     """
-    global _model, _model_args
     if not os.path.exists(checkpoint_path):
         enable_progress_bars()
         checkpoint_path = hf_hub_download(repo_id=checkpoint_path, filename=filename)
-    _model, _model_args = load_model(checkpoint_path)
-
-
-def inference(video, mode="clean_shot", overlap=20):
-    """Run shot cut detection on a video.
-
-    Requires load() to be called first.
-
-    Args:
-        video: str file path | np.ndarray (T,H,W,3) uint8 RGB | torch.Tensor (T,H,W,3)
-        mode: "clean_shot" — general cuts only (no transitions)
-              "default"    — all detected shots with full labels
-        overlap: number of overlap frames between adjacent inference windows
-
-    Returns:
-        ranges:       list of [start_frame, end_frame]
-        intra_labels: list of int (0=General, 1=Dissolve, 2=Wipes, ...)
-        inter_labels: list of int (0=New_Start, 1=Hard_Cut, 2=Transition_Source, ...)
-    """
-    if _model is None:
-        raise RuntimeError("Model not loaded. Call cut_model.load(checkpoint_path) first.")
-
-    if isinstance(video, str):
-        h, w = _model_args.process_height, _model_args.process_width
-        vr = VideoReader(video, ctx=decord_cpu(0), width=w, height=h)
-        video_np = vr[:].asnumpy()
-    elif isinstance(video, torch.Tensor):
-        if video.ndim != 4 or video.shape[-1] != 3:
-            raise ValueError(f"Tensor must be (T, H, W, 3), got {tuple(video.shape)}")
-        video_np = video.cpu().numpy()
-        if video_np.dtype != np.uint8:
-            if video_np.min() < 0.0 or video_np.max() > 1.0:
-                raise ValueError(f"Float tensor must be in [0, 1], got range [{video_np.min():.3f}, {video_np.max():.3f}]")
-            video_np = (video_np * 255).astype(np.uint8)
-    else:
-        video_np = np.asarray(video)
-        if video_np.ndim != 4 or video_np.shape[-1] != 3:
-            raise ValueError(f"numpy array must be (T, H, W, 3), got {video_np.shape}")
-        if video_np.dtype != np.uint8:
-            if video_np.min() < 0.0 or video_np.max() > 1.0:
-                raise ValueError(f"Float array must be in [0, 1], got range [{video_np.min():.3f}, {video_np.max():.3f}]")
-            video_np = (video_np * 255).astype(np.uint8)
-
-    ranges, intra_labels, inter_labels = _run_on_numpy(video_np, _model, _model_args, overlap)
-
-    if mode == "clean_shot":
-        general_idx = unique_intra_label_mapping["general"]
-        keep = [i for i, lbl in enumerate(intra_labels) if lbl == general_idx]
-        ranges = np.array(ranges)[keep].tolist() if keep else []
-        intra_labels = np.array(intra_labels)[keep].tolist() if keep else []
-        inter_labels = np.array(inter_labels)[keep].tolist() if keep else []
-
-    return ranges, intra_labels, inter_labels
+    model, model_args = load_model(checkpoint_path)
+    return OmniShotCutModel(model, model_args)

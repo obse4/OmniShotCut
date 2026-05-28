@@ -16,7 +16,7 @@ OmniShotCut can detect shot changes of the video in diverse sources (anime, vlog
 <a href="https://huggingface.co/uva-cv-lab/OmniShotCut"><img src="https://img.shields.io/static/v1?label=%F0%9F%A4%97%20HuggingFace&message=Model+Weight&color=orange"></a>
 
 
-🔥 [Update](#Update) **|** 👀 [**Visualization**](#Visualization)  **|** 🔧 [Installation](#Installation) **|** ⚡ [Inference](#fast_inference)  **|** 💻 [OmniShotCut Benchmark](#evaluation)
+🔥 [Update](#Update) **|** 👀 [**Visualization**](#Visualization) **|** 🔧 [Installation](#Installation) **|** 🐍 [Quick Start](#quick_start) **|** ⚡ [Inference](#fast_inference) **|** 💻 [OmniShotCut Benchmark](#evaluation)
 
 
 
@@ -65,6 +65,26 @@ pip install -e .
 
 
 
+## <a name="quick_start"></a> Quick Start 🐍
+
+Once installed, running shot boundary detection is just a few lines:
+
+```python
+import omnishotcut
+
+# Load model — accepts a local checkpoint path or HuggingFace repo
+cut_model = omnishotcut.load("uva-cv-lab/OmniShotCut", filename = "OmniShotCut_ckpt.pth")
+
+# Run on a video file
+ranges, intra_labels, inter_labels = cut_model.inference("video.mp4", mode="clean_shot")
+```
+
+`ranges` is a list of `[start_frame, end_frame]` pairs for each detected shot.
+By default `mode="clean_shot"` returns only clean cuts (no transitions). Use `mode="default"` to also get dissolves, wipes, and fades with their labels.
+
+
+
+
 ## <a name="fast_inference"></a> Gradio Demo ⚡⚡⚡
 Local Gradio can be created by simply running the following:
 ```shell
@@ -77,6 +97,7 @@ Click "Running on **public** URL".
 
 ## <a name="inference"></a> Inference ⚡
 
+This section presents more formal fun and controllable setting in running.
 
 First, let us download the checkpoint
 ```shell
