@@ -262,204 +262,74 @@ def single_video_inference(video_path, model, model_args, overlap_window_length)
 
 
 
-
-def dump_list_of_dict(data, save_path, indent=4):
+def _run_on_numpy(video_np, model, model_args, overlap_window_length):
+    """Run inference on a pre-loaded numpy array (T, H, W, 3).
+    Returns (ranges, intra_labels, inter_labels).
     """
-    Save list[dict] as JSON.
-    Convert pred_intra_labels / pred_inter_labels from int to string.
-    """
+    max_process_window_length = model_args.max_process_window_length
 
-    def convert_item(item):
-        item = copy.deepcopy(item)
+    pred_boundary_full = []
 
-        if "pred_intra_labels" in item:
-            item["pred_intra_labels"] = [
-                intra_int2string.get(x, f"Unknown_{x}")
-                for x in item["pred_intra_labels"]
-            ]
+    for clip_idx, (video_chunk, num_pad_frames, window_start_idx, valid_start_idx, valid_end_idx, valid_len) in enumerate(split_videos(video_np, max_process_window_length, overlap_window_length)):
 
-        if "pred_inter_labels" in item:
-            item["pred_inter_labels"] = [
-                inter_int2string.get(x, f"Unknown_{x}")
-                for x in item["pred_inter_labels"]
-            ]
+        video_tensor = video_transform(video_chunk).unsqueeze(0).to("cuda")
 
-        return item
+        with torch.inference_mode():
+            outputs = model(video_tensor)
 
-    def format_dict(d, level):
-        indent_str = " " * (indent * level)
-        inner_indent = " " * (indent * (level + 1))
+        probas_intra = outputs['intra_clip_logits'].softmax(-1)[0, :, :-1]
+        probas_inter = outputs['inter_clip_logits'].softmax(-1)[0, :, :-1]
+        range_probas = outputs['pred_shot_logits'].softmax(-1)[0, :, :-1]
+        query_intra_idx = probas_intra.argmax(dim=-1)
+        query_inter_idx = probas_inter.argmax(dim=-1)
+        query_range_idx = range_probas.argmax(dim=-1)
 
-        lines = [indent_str + "{"]
-        items = list(d.items())
+        pred_boundary = []
+        start_frame_idx_local = 0
 
-        for i, (k, v) in enumerate(items):
-            value_str = json.dumps(v, ensure_ascii=False)
-            comma = "," if i < len(items) - 1 else ""
-            lines.append(f'{inner_indent}"{k}": {value_str}{comma}')
+        for keep_idx in range(len(query_intra_idx)):
 
-        lines.append(f"{indent_str}}}")
-        return "\n".join(lines)
+            pred_intra_label = int(query_intra_idx[keep_idx].detach().cpu())
+            pred_inter_label = int(query_inter_idx[keep_idx].detach().cpu())
 
-    data = [convert_item(item) for item in data]
+            end_frame_idx_local = int(query_range_idx[keep_idx].detach().cpu())
+            end_frame_idx_local = min(end_frame_idx_local, valid_len)
 
-    with open(save_path, "w", encoding="utf-8") as f:
-        f.write("[\n")
+            if start_frame_idx_local >= end_frame_idx_local:
+                continue
 
-        for i, item in enumerate(data):
-            dict_str = format_dict(item, level=1)
-            comma = "," if i < len(data) - 1 else ""
-            f.write(dict_str + comma + "\n")
+            end_frame_idx_global = window_start_idx + end_frame_idx_local
 
-        f.write("]\n")
+            if valid_start_idx < end_frame_idx_global <= valid_end_idx:
+                pred_boundary.append(
+                    {
+                        "end_frame_idx": int(end_frame_idx_global),
+                        "intra_label": int(pred_intra_label),
+                        "inter_label": int(pred_inter_label),
+                    }
+                )
 
+            start_frame_idx_local = end_frame_idx_local
 
+            if end_frame_idx_local >= valid_len:
+                break
 
-def parse_args():
-    parser = argparse.ArgumentParser()
+        pred_boundary_full = merge_predictions(pred_boundary_full, pred_boundary)
 
-    parser.add_argument(
-                            "--checkpoint_path",
-                            type = str,
-                            default = "checkpoints/OmniShotCut_ckpt.pth",
-                            help = "Path to checkpoint file."
-                        )
-    parser.add_argument(
-                            "--input_video_path",
-                            type = str,
-                            default = "__assets__/demo_video1.mp4",
-                            help = "Path to the input video path."
-                        )
-    parser.add_argument(
-                            "--result_store_path",
-                            type = str,
-                            default = "results.json",
-                            help="Path to save result json."
-                        )
-    parser.add_argument(
-                            "--overlap_window_length",
-                            type = int,
-                            default = 20,
-                            help = "Number of overlapped frames between adjacent inference windows."
-                        )
-    parser.add_argument(
-                            "--visual_store_folder_path",
-                            type = str,
-                            default = "demo_video_results",
-                            help = "Path to save the visualization results. Set to None to disable."
-                        )
-    parser.add_argument(
-                            "--mode",
-                            type = str,
-                            default = "default",
-                            choices = ["default", "clean_shot"],
-                            help = "Output Mode. 'default' means all Intra and Inter label. 'clean_shot' means only General Shot Cut without transitions. "
-                        )
+    pred_ranges = []
+    pred_intra_labels = []
+    pred_inter_labels = []
+    start_frame_idx = 0
 
-    return parser.parse_args()
+    for item in pred_boundary_full:
+        end_frame_idx = int(item["end_frame_idx"])
+        if end_frame_idx <= start_frame_idx:
+            continue
+        pred_ranges.append([int(start_frame_idx), int(end_frame_idx)])
+        pred_intra_labels.append(int(item["intra_label"]))
+        pred_inter_labels.append(int(item["inter_label"]))
+        start_frame_idx = end_frame_idx
+
+    return pred_ranges, pred_intra_labels, pred_inter_labels
 
 
-
-
-if __name__ == '__main__':
-
-    # Setting
-    inference_args = parse_args()
-    checkpoint_path = inference_args.checkpoint_path
-    input_video_path = inference_args.input_video_path
-    assert(os.path.exists(input_video_path))
-    result_store_path = inference_args.result_store_path
-    visual_store_folder_path = inference_args.visual_store_folder_path
-    mode = inference_args.mode
-    
-
-
-    # Prepare the folder
-    if visual_store_folder_path is not None:
-        if os.path.exists(visual_store_folder_path):
-            shutil.rmtree(visual_store_folder_path)
-        os.makedirs(visual_store_folder_path)
-
-
-    # Load Checkpoint & Model Config
-    assert(os.path.exists(checkpoint_path))
-    state_dict = torch.load(checkpoint_path, map_location='cpu', weights_only=False)
-    model_args = state_dict['args']
-    print("Checkpoint stored args are", model_args)
-
-
-    # Init the Model
-    print("Loading OmniShotCut Model!")
-    backbone = build_backbone(model_args)
-    transformer = build_transformer(model_args)
-    model = OmniShotCut(
-                            backbone,
-                            transformer,
-                            num_intra_relation_classes = model_args.num_intra_relation_classes,
-                            num_inter_relation_classes = model_args.num_inter_relation_classes,
-                            num_frames = model_args.max_process_window_length, 
-                            num_queries = model_args.num_queries,
-                            aux_loss = model_args.aux_loss,
-                        )
-    model.load_state_dict(state_dict['model'], strict=True)
-    model.to("cuda")
-    model.eval()
-
-
-
-
-    # Do the inference
-    print("Do the inference!")
-    pred_ranges_full, pred_intra_labels_full, pred_inter_labels_full, video_np_full, fps = single_video_inference(
-                                                                                                                    input_video_path,
-                                                                                                                    model,
-                                                                                                                    model_args,
-                                                                                                                    inference_args.overlap_window_length,
-                                                                                                                )
-
-
-
-    # Visualize
-    if visual_store_folder_path is not None:
-        print("Visualize the results!")
-        pred_saved_paths = visualize_concated_frames(
-                                                        video_np_full,
-                                                        visual_store_folder_path,
-                                                        pred_ranges_full,
-                                                        max_frames_per_img=264,
-                                                        end_range_exclusive=True,
-                                                        fps=fps,
-                                                        start_index = 0,
-                                                    )
-
-
-
-     # For Clean Shot mode, we only leave general types
-    if mode == "clean_shot":     
-        
-        # Clean shot mode (No Transitions in the middle)
-        general_type_idx = unique_intra_label_mapping["general"]
-        effective_indices = []
-        for idx, intra_label in enumerate(pred_intra_labels_full):
-            if intra_label == general_type_idx:
-                effective_indices.append(idx)
-        
-        # Reassign the shots
-        pred_ranges_full = np.array(pred_ranges_full)[effective_indices].tolist()
-        pred_intra_labels_full = np.array(pred_intra_labels_full)[effective_indices].tolist()
-        pred_inter_labels_full = np.array(pred_inter_labels_full)[effective_indices].tolist()
-
-    
-
-    # Collect prediction results
-    pred_result = {}
-    pred_result["video_path"] = input_video_path
-    pred_result["pred_ranges"] = pred_ranges_full
-    pred_result["pred_intra_labels"] = pred_intra_labels_full
-    pred_result["pred_inter_labels"] = pred_inter_labels_full
-    
-    # Dump to json
-    dump_list_of_dict([pred_result], result_store_path)
-
-
-    print("Finished!")

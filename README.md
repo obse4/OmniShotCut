@@ -25,6 +25,7 @@ OmniShotCut can detect shot changes of the video in diverse sources (anime, vlog
 - [x] Release ArXiv paper
 - [x] Release the inference weights
 - [x] Release Gradio demo (with online)
+- [x] Release 'pip install omnishotcut' version
 - [ ] Release the benchmark
 - [ ] Release the training code and curation
       
@@ -45,10 +46,21 @@ OmniShotCut can detect shot changes of the video in diverse sources (anime, vlog
 
 
 ## <a name="Installation"></a> Installation 🔧
+
+**Option 1: pip install from GitHub (recommended for users)**
+
+First install PyTorch with CUDA support.
+Then install OmniShotCut:
+```shell
+pip install git+https://github.com/UVA-Computer-Vision-Lab/OmniShotCut.git
+```
+
+**Option 2: Local development install**
 ```shell
 conda create -n OmniShotCut python=3.10
 conda activate OmniShotCut
 pip install -r requirements.txt
+pip install -e .
 ```
 
 
@@ -79,9 +91,10 @@ To this end, please use '--mode clean_shot'.
 
 Execute the inference by:
 ```shell
-python test_code/inference.py  --checkpoint_path checkpoints/OmniShotCut_ckpt.pth  --input_video_path XXX  --overlap_window_length 20  --mode default
+python inference.py  --checkpoint_path checkpoints/OmniShotCut_ckpt.pth  --input_video_path __assets__/demo_video1.mp4  --overlap_window_length 20  --mode default
 ```
-We will visualize the results by creating a folder named 'demo_video_results', where vertical bar with the same color refer to the same shot.
+
+Results are saved to `results.json`. Visualization is saved to `demo_video_results/`, where vertical bars with the same color indicate the same shot.
 
 
 
