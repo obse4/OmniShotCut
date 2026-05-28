@@ -1,3 +1,4 @@
+import logging
 import os
 import numpy as np
 import torch
@@ -5,8 +6,10 @@ from decord import VideoReader, cpu as decord_cpu
 from huggingface_hub import hf_hub_download
 from huggingface_hub.utils import enable_progress_bars
 
+logger = logging.getLogger(__name__)
+
 from omnishotcut.engine import load_model, _run_on_numpy
-from omnishotcut.label_correspondence import unique_intra_label_mapping
+from omnishotcut.label_correspondence import unique_intra_label_mapping, intra_int2string, inter_int2string
 
 
 _DEFAULT_HF_FILENAME = "OmniShotCut_ckpt.pth"
@@ -59,9 +62,10 @@ class OmniShotCutModel:
             general_idx = unique_intra_label_mapping["general"]
             keep = [i for i, lbl in enumerate(intra_labels) if lbl == general_idx]
             ranges = np.array(ranges)[keep].tolist() if keep else []
-            intra_labels = np.array(intra_labels)[keep].tolist() if keep else []
-            inter_labels = np.array(inter_labels)[keep].tolist() if keep else []
+            return ranges
 
+        intra_labels = [intra_int2string.get(x, str(x)) for x in intra_labels]
+        inter_labels = [inter_int2string.get(x, str(x)) for x in inter_labels]
         return ranges, intra_labels, inter_labels
 
 
@@ -73,7 +77,11 @@ def load(checkpoint_path, filename=_DEFAULT_HF_FILENAME):
       - a HF repo ID       → download the specified filename from that repo
     """
     if not os.path.exists(checkpoint_path):
+        logger.info(f"Downloading checkpoint from HuggingFace: {checkpoint_path} ...")
         enable_progress_bars()
         checkpoint_path = hf_hub_download(repo_id=checkpoint_path, filename=filename)
+
+    logger.info(f"Loading OmniShotCut from {checkpoint_path} ...")
     model, model_args = load_model(checkpoint_path)
+    logger.info("OmniShotCut loaded successfully.")
     return OmniShotCutModel(model, model_args)

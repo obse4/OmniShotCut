@@ -45,27 +45,14 @@ OmniShotCut can detect shot changes of the video in diverse sources (anime, vlog
 
 
 
-## <a name="Installation"></a> Installation 🔧
 
-**Option 1: pip install from GitHub (recommended for users)**
+## <a name="quick_start"></a> Quick Start 🐍
 
 First install PyTorch with CUDA support.
 Then install OmniShotCut:
 ```shell
 pip install git+https://github.com/UVA-Computer-Vision-Lab/OmniShotCut.git
 ```
-
-**Option 2: Local development install**
-```shell
-conda create -n OmniShotCut python=3.10
-conda activate OmniShotCut
-pip install -r requirements.txt
-pip install -e .
-```
-
-
-
-## <a name="quick_start"></a> Quick Start 🐍
 
 Once installed, running shot boundary detection is just a few lines:
 
@@ -76,13 +63,30 @@ import omnishotcut
 cut_model = omnishotcut.load("uva-cv-lab/OmniShotCut", filename = "OmniShotCut_ckpt.pth")
 
 # Run on a video file
-ranges, intra_labels, inter_labels = cut_model.inference("video.mp4", mode="clean_shot")
+ranges = cut_model.inference("video.mp4", mode="clean_shot")
 ```
 
 `ranges` is a list of `[start_frame, end_frame]` pairs for each detected shot.
-By default `mode="clean_shot"` returns only clean cuts (no transitions). Use `mode="default"` to also get dissolves, wipes, and fades with their labels.
+By default `mode="clean_shot"` returns only clean cuts (no transitions). 
+Use `mode="default"` to also get dissolves, wipes, and fades with their labels:
+
+```python
+ranges, intra_labels, inter_labels = cut_model.inference("video.mp4", mode="default")
+```
+
+Besides video file paths, `inference()` also accepts **numpy** arrays and **torch** tensors directly — both should be `(T, H, W, 3)` uint8 RGB:
 
 
+
+
+
+## <a name="Installation"></a> Full Local Installation 🔧
+```shell
+conda create -n OmniShotCut python=3.10
+conda activate OmniShotCut
+pip install -r requirements.txt
+pip install -e .
+```
 
 
 ## <a name="fast_inference"></a> Gradio Demo ⚡⚡⚡
