@@ -3,27 +3,19 @@
     Data Loader for OmniShotCut. Modified from DETR.
 """
 
-import os, sys, shutil
+import os
 import random
 from typing import List, Union, Optional, Tuple
-from pathlib import Path
 import numpy as np
-import ffmpeg
+from decord import VideoReader, cpu as decord_cpu
 import torch
-import torch.utils.data
-import imageio
-import torchvision
 import torch.nn.functional as F
 from torch.utils.data import Dataset
-from PIL import Image
 
 
-# Import files from the local folder
-root_path = os.path.abspath('.')
-sys.path.append(root_path)
-from datasets.transforms import Video_Augmentation_Transform
-from config.label_correspondence import unique_intra_label_mapping, unique_inter_label_mapping
-from util.visualization import visualize_concated_frames
+from .transforms import Video_Augmentation_Transform
+from ..label_correspondence import unique_intra_label_mapping, unique_inter_label_mapping
+from ..util.visualization import visualize_concated_frames
 
 
 
@@ -170,16 +162,9 @@ class CutAnything_Dataloader(Dataset):
 
                 ############################################################ Construct the Video Inputs #########################################################################
 
-                # Read the video by ffmpeg
-                resolution = str(self.process_width) + "x" + str(self.process_height)
-                video_stream, err = ffmpeg.input(
-                                                    video_path
-                                                ).output(
-                                                    "pipe:", format = "rawvideo", pix_fmt = "rgb24", s = resolution, vsync = 'passthrough',
-                                                ).run(
-                                                    capture_stdout = True, capture_stderr = True
-                                                )      # The resize is already included
-                video_np_full = np.frombuffer(video_stream, np.uint8).reshape(-1, self.process_height, self.process_width, 3)
+                # Read the video by decord
+                vr = VideoReader(video_path, ctx=decord_cpu(0), width=self.process_width, height=self.process_height)
+                video_np_full = vr[:].asnumpy()     # shape: (N, H, W, 3), uint8, RGB
                 original_num_frames = len(video_np_full)
                 if original_num_frames < self.max_process_window_length:
                     print("We only has", original_num_frames, "number of frames!")

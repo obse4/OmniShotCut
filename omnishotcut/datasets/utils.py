@@ -1,16 +1,11 @@
 '''
     Util for collate function and related needs
 '''
-import os, sys, shutil
 from typing import Optional, List
 import torch
 from torch import Tensor
 
-
-# Import files from the local folder
-root_path = os.path.abspath('.')
-sys.path.append(root_path)
-from util.misc import NestedTensor
+from ..util.misc import NestedTensor
 
 
 

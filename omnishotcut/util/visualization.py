@@ -1,5 +1,5 @@
-import os, sys, math
-from typing import List, Optional, Tuple, Dict
+import os, math
+from typing import List, Optional, Tuple
 import numpy as np
 from PIL import Image, ImageDraw, ImageFont
 
@@ -84,7 +84,7 @@ def visualize_concated_frames(
     pad: int = 3,
     bg_color: Tuple[int, int, int] = (0, 0, 0),
     resize_to: Optional[Tuple[int, int]] = None,
-    start_index: int = 0,           # time 的对齐的位置
+    start_index: int = 0,           # alignment position along the time axis
     text_color: Tuple[int, int, int] = (255, 0, 0),
     font_size: int = 18,
     text_pad: Tuple[int, int] = (4, 2),
@@ -179,86 +179,5 @@ def visualize_concated_frames(
 
 
 
-
-
-def concat_image_lists_horizontal(
-    list1: List[str],
-    list2: List[str],
-    out_dir: str,
-    bar_width: int = 40,
-    bar_color: Tuple[int, int, int] = (255, 0, 0),
-    out_prefix: str = "merged_",
-    out_ext: str = ".jpg",
-    jpg_quality: int = 90,
-    resize_mode: str = "match_height",  # ["match_height", "match_width", "none"]
-    verbose: bool = True,
-) -> List[str]:
-    """
-    Horizontally concatenate images from two path lists (same index),
-    with a thick visual bar in between.
-
-    Args:
-        list1, list2: list of image file paths (must have same length)
-        out_dir: directory to save merged images
-        bar_width: thickness of the separator bar
-        bar_color: RGB color of separator bar
-        resize_mode:
-            - "match_height": resize second image to match height
-            - "match_width": resize second image to match width
-            - "none": no resize (heights must match)
-    Returns:
-        List of saved image paths
-    """
-
-    assert len(list1) == len(list2), "Two lists must have same length"
-
-    os.makedirs(out_dir, exist_ok=True)
-
-    saved_paths = []
-
-    for idx, (p1, p2) in enumerate(zip(list1, list2)):
-
-        img1 = Image.open(p1).convert("RGB")
-        img2 = Image.open(p2).convert("RGB")
-
-        # ---------- Resize logic ----------
-        if resize_mode == "match_height":
-            if img1.height != img2.height:
-                new_w = int(img2.width * img1.height / img2.height)
-                img2 = img2.resize((new_w, img1.height), Image.BILINEAR)
-
-        elif resize_mode == "match_width":
-            if img1.width != img2.width:
-                new_h = int(img2.height * img1.width / img2.width)
-                img2 = img2.resize((img1.width, new_h), Image.BILINEAR)
-
-        elif resize_mode == "none":
-            assert img1.height == img2.height, \
-                "Heights must match when resize_mode='none'"
-
-        else:
-            raise ValueError("resize_mode must be one of ['match_height', 'match_width', 'none']")
-
-        # ---------- Create bar ----------
-        bar = Image.new("RGB", (bar_width, img1.height), color=bar_color)
-
-        # ---------- Create canvas ----------
-        total_width = img1.width + bar_width + img2.width
-        canvas = Image.new("RGB", (total_width, img1.height))
-
-        canvas.paste(img1, (0, 0))
-        canvas.paste(bar, (img1.width, 0))
-        canvas.paste(img2, (img1.width + bar_width, 0))
-
-        # ---------- Save ----------
-        out_path = os.path.join(out_dir, f"{out_prefix}{idx:04d}{out_ext}")
-        canvas.save(out_path, quality=jpg_quality)
-        saved_paths.append(out_path)
-
-    if verbose:
-        print(f"Done. Saved {len(saved_paths)} merged images to {out_dir}")
-
-
-    return saved_paths
 
 

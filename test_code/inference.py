@@ -4,15 +4,10 @@
 import os, sys, shutil
 import argparse
 import numpy as np
-import math
-import subprocess
-import cv2
 import copy
-import ffmpeg
+from decord import VideoReader, cpu as decord_cpu
 import json
 import torch
-import torchvision.transforms as T
-from torch.utils.data import DataLoader
 import warnings
 warnings.filterwarnings("ignore", category=UserWarning)
 
@@ -20,19 +15,16 @@ warnings.filterwarnings("ignore", category=UserWarning)
 # Import files from the local folder
 root_path = os.path.abspath('.')
 sys.path.append(root_path)
-from config.argument_setting import get_args_parser
-from architecture.backbone import build_backbone
-from architecture.transformer import build_transformer
-from architecture.model import OmniShotCut
-from datasets.transforms import Video_Augmentation_Transform
-from util.visualization import visualize_concated_frames
-from config.label_correspondence import unique_intra_label_mapping, unique_inter_label_mapping, intra_int2string, inter_int2string
+from omnishotcut.architecture.backbone import build_backbone
+from omnishotcut.architecture.transformer import build_transformer
+from omnishotcut.architecture.model import OmniShotCut
+from omnishotcut.datasets.transforms import Video_Augmentation_Transform
+from omnishotcut.util.visualization import visualize_concated_frames
+from omnishotcut.label_correspondence import unique_intra_label_mapping, unique_inter_label_mapping, intra_int2string, inter_int2string
 
 
 # Video Transform
 video_transform = Video_Augmentation_Transform(set_type = "val")
-
-
 
 
 
@@ -47,7 +39,7 @@ def load_model(checkpoint_path: str):
 
 
     # Load state dict
-    state_dict = torch.load(checkpoint_path, map_location="cpu")
+    state_dict = torch.load(checkpoint_path, map_location="cpu", weights_only=False)
     if "args" not in state_dict or "model" not in state_dict:
         raise ValueError("Checkpoint must contain keys: 'args' and 'model'.")
 
@@ -74,141 +66,106 @@ def load_model(checkpoint_path: str):
 
 
 
-def get_video_fps_safe(video_path: str, default_fps: float = 24.0) -> float:
-    try:
-        cap = cv2.VideoCapture(video_path)
-        fps = cap.get(cv2.CAP_PROP_FPS)
-        cap.release()
-        if fps is None or fps <= 1e-6 or math.isnan(fps):
-            return default_fps
-        return float(fps)
-    except Exception:
-        return default_fps
-
-
-
-def split_videos(video, chunk_size, num_context_frames):
+def split_videos(video, chunk_size, overlap_size):
 
     assert video.ndim == 4, "video must be (T, H, W, C)"
-    total_num_frames, H, W, C = video.shape
-    
+    assert overlap_size >= 0 and overlap_size < chunk_size
 
-    # Padding at the beginning
-    black = np.zeros((num_context_frames, H, W, C), dtype=video.dtype)
-    video = np.concatenate([black, video], axis=0)
+    T, H, W, C = video.shape
+    stride = chunk_size - overlap_size
 
-
-    # Split Video to clips
-    stride = chunk_size - 2 * num_context_frames
-    cur_frame_idx = 0
+    # Form the return list
     return_list = []
-    while cur_frame_idx < total_num_frames:
-        
-        # Fetch the range
-        cropped_videos = video[cur_frame_idx : cur_frame_idx + chunk_size]
+    window_start_idx = 0
 
-        # Add padding if needed
-        clip_num_adding_frames = chunk_size - len(cropped_videos)
-        if clip_num_adding_frames > 0:
-            black = np.zeros((clip_num_adding_frames, H, W, C), dtype=video.dtype)
-            cropped_videos = np.concatenate([cropped_videos, black], axis=0)
+    while window_start_idx < T:
 
-        # Append all return info: (video_np, clip padding frames, global start frame idx)
-        return_list.append([cropped_videos, clip_num_adding_frames])
+        window_end_idx = window_start_idx + chunk_size
+        valid_len = min(chunk_size, T - window_start_idx)
 
-        # Update
-        cur_frame_idx += stride
-        
-    return return_list
-    
+        # Fetch current window
+        chunk = video[window_start_idx:min(window_end_idx, T)]
 
+        # Padding
+        num_pad_frames = chunk_size - valid_len
+        if num_pad_frames > 0:
+            black = np.zeros((num_pad_frames, H, W, C), dtype=video.dtype)
+            chunk = np.concatenate([chunk, black], axis=0)
 
-def prune_non_context_ranges(pred_ranges, pred_intra_labels, pred_inter_labels, inference_window_size, num_context_frames):
+        # Valid region for this window. We split the overlap region by half.
+        left_overlap = overlap_size // 2
+        right_overlap = overlap_size - left_overlap
 
-    # Init
-    new_pred_ranges, new_pred_intra_labels, new_pred_inter_labels = [], [], []
+        if window_start_idx == 0:
+            valid_start_idx = 0
+        else:
+            valid_start_idx = window_start_idx + left_overlap
 
+        if window_end_idx >= T:
+            valid_end_idx = T
+        else:
+            valid_end_idx = window_end_idx - right_overlap
 
-    # Iterate
-    for shot_idx in range(len(pred_ranges)):
+        return_list.append(
+            [
+                chunk,
+                num_pad_frames,
+                window_start_idx,
+                valid_start_idx,
+                valid_end_idx,
+                valid_len,
+            ]
+        )
 
-        # Fetch
-        start_frame_idx, end_frame_idx = pred_ranges[shot_idx]
-
-        # Check if we should skip
-        if end_frame_idx <= num_context_frames:     # Beginning
-            continue
-        if start_frame_idx >= inference_window_size - num_context_frames:       # Ending
+        # End
+        if window_end_idx >= T:
             break
 
-        # Re align start & end
-        aligned_start_frame_idx = max(start_frame_idx, num_context_frames) - num_context_frames
-        aligned_end_frame_idx = min(end_frame_idx, inference_window_size - num_context_frames) - num_context_frames         # exclusive on the right range
+        window_start_idx += stride
 
-        # Append
-        new_pred_ranges.append([aligned_start_frame_idx, aligned_end_frame_idx])
-        new_pred_intra_labels.append(pred_intra_labels[shot_idx])
-        new_pred_inter_labels.append(pred_inter_labels[shot_idx])
-
-    return new_pred_ranges, new_pred_intra_labels, new_pred_inter_labels
+    return return_list
 
 
 
-def merge_ranges(pred_ranges_full, pred_intra_labels_full, pred_inter_labels_full, pred_ranges, pred_intra_labels, pred_inter_labels):
+def merge_predictions(pred_boundary_full, pred_boundary, duplicate_tolerance=2):
 
-    # Prepare
-    last_frame_idx = pred_ranges_full[-1][-1] if len(pred_intra_labels_full) != 0 else 0
+    # Sort
+    pred_boundary = sorted(pred_boundary, key=lambda x: x["end_frame_idx"])
 
+    # Merge
+    for item in pred_boundary:
 
-    # Merge last one of the list list 
-    if len(pred_intra_labels_full) != 0 and pred_intra_labels_full[-1] == pred_intra_labels[0] and pred_inter_labels[0] == unique_inter_label_mapping['new_start']:  
-        pred_ranges_full[-1][-1] = last_frame_idx + pred_ranges[0][-1]
-        
-        # Crop the first one
-        pred_ranges = pred_ranges[1:]
-        pred_intra_labels = pred_intra_labels[1:]
-        pred_inter_labels = pred_inter_labels[1:]
+        # Check duplicate
+        if len(pred_boundary_full) != 0:
+            last_end_frame_idx = pred_boundary_full[-1]["end_frame_idx"]
+            if abs(item["end_frame_idx"] - last_end_frame_idx) <= duplicate_tolerance:
+                continue
 
+        pred_boundary_full.append(item)
 
-    # Extend the following list
-    for idx in range(len(pred_ranges)):
-        start_frame_idx, end_frame_idx = pred_ranges[idx]
-
-        pred_ranges_full.append([last_frame_idx + start_frame_idx, last_frame_idx + end_frame_idx])
-        pred_intra_labels_full.append(pred_intra_labels[idx])
-        pred_inter_labels_full.append(pred_inter_labels[idx])
-
-
-    return pred_ranges_full, pred_intra_labels_full, pred_inter_labels_full
+    return pred_boundary_full
 
 
 
-def single_video_inference(video_path, model, model_args, num_context_frames):
+def single_video_inference(video_path, model, model_args, overlap_window_length):
 
 
     # Init the parameter
-    num_context_frames = num_context_frames
     max_process_window_length = model_args.max_process_window_length
     process_height, process_width = model_args.process_height, model_args.process_width
 
 
     # Read the Video
-    fps = get_video_fps_safe(video_path)       # get_fps sometimes might have the bug
-    video_stream, err = ffmpeg.input(
-                                        video_path
-                                    ).output(
-                                        "pipe:", format = "rawvideo", pix_fmt = "rgb24", s = str(process_width) + "x" + str(process_height),  vsync = 'passthrough',
-                                    ).run(
-                                        capture_stdout = True, capture_stderr = True
-                                    )      # The resize is already included
-    video_np_full = np.frombuffer(video_stream, np.uint8).reshape(-1, process_height, process_width, 3)
+    vr = VideoReader(video_path, ctx=decord_cpu(0), width=process_width, height=process_height)
+    fps = vr.get_avg_fps()
+    video_np_full = vr[:].asnumpy()  # (T, H, W, 3), RGB
     
 
     # Iterate all the clips
-    pred_ranges_full, pred_intra_labels_full, pred_inter_labels_full = [], [], []
-    for clip_idx, (video_np, num_pad_frames) in enumerate(split_videos(video_np_full, max_process_window_length, num_context_frames)):
+    pred_boundary_full = []
 
-        
+    for clip_idx, (video_np, num_pad_frames, window_start_idx, valid_start_idx, valid_end_idx, valid_len) in enumerate(split_videos(video_np_full, max_process_window_length, overlap_window_length)):
+
         # Transform
         video_tensor = video_transform(video_np).unsqueeze(0).to("cuda")
 
@@ -227,42 +184,78 @@ def single_video_inference(video_path, model, model_args, num_context_frames):
         query_range_idx = range_probas.argmax(dim=-1)
 
 
-        # Print Prediction Results
-        # print(f"\nPrediction Results for clip {clip_idx}:")
-        pred_ranges, pred_intra_labels, pred_inter_labels = [], [], []
-        start_frame_idx = 0
+        pred_boundary = []
+        start_frame_idx_local = 0
+
         for keep_idx in range(len(query_intra_idx)):
 
             # Fetch Label
             pred_intra_label = int(query_intra_idx[keep_idx].detach().cpu())
             pred_inter_label = int(query_inter_idx[keep_idx].detach().cpu())
 
-            # Convert ranges from [0, 1] to video duration scales
-            end_frame_idx = int(query_range_idx[keep_idx].detach().cpu())
-            pred_range = [start_frame_idx, end_frame_idx]
-            if start_frame_idx >= end_frame_idx:         # End the iteration
+            # Convert ranges from local window scale to video duration scale
+            end_frame_idx_local = int(query_range_idx[keep_idx].detach().cpu())
+            end_frame_idx_local = min(end_frame_idx_local, valid_len)
+
+            pred_range = [start_frame_idx_local, end_frame_idx_local]
+            pred_range_global = [
+                window_start_idx + start_frame_idx_local,
+                window_start_idx + end_frame_idx_local,
+            ]
+
+            # Sometimes model outputs the same start/end. Skip to avoid invalid range.
+            if start_frame_idx_local >= end_frame_idx_local:
                 continue
-            # print("\tRange is", pred_range, "&& Intra + Inter Label is", pred_intra_label, pred_inter_label)             # NOTE: np.round() is the accurate way to write
-            
 
-            # Append the result 
-            pred_ranges.append(pred_range)
-            pred_intra_labels.append(pred_intra_label)
-            pred_inter_labels.append(pred_inter_label)
-            start_frame_idx = end_frame_idx
-        
-            
+            # Append only the boundary inside the valid region
+            end_frame_idx_global = window_start_idx + end_frame_idx_local
+
+            if valid_start_idx < end_frame_idx_global <= valid_end_idx:
+                pred_boundary.append(
+                    {
+                        "end_frame_idx": int(end_frame_idx_global),
+                        "intra_label": int(pred_intra_label),
+                        "inter_label": int(pred_inter_label),
+                    }
+                )
+
+            start_frame_idx_local = end_frame_idx_local
+
             # End
-            if end_frame_idx >= max_process_window_length - num_pad_frames:
-                break                # Touch the end / padding frames, we can jump out earlier
-        
+            if end_frame_idx_local >= valid_len:
+                break
 
-        # Prune predictions to the current range
-        pred_ranges, pred_intra_labels, pred_inter_labels = prune_non_context_ranges(pred_ranges, pred_intra_labels, pred_inter_labels, max_process_window_length, num_context_frames)
+        # Merge predicted results; here pred_boundary are already valid
+        pred_boundary_full = merge_predictions(
+            pred_boundary_full,
+            pred_boundary,
+        )
 
 
-        # Merge predicted results
-        pred_ranges_full, pred_intra_labels_full, pred_inter_labels_full = merge_ranges(pred_ranges_full, pred_intra_labels_full, pred_inter_labels_full, pred_ranges, pred_intra_labels, pred_inter_labels)
+    # Convert boundary to range
+    pred_ranges_full = []
+    pred_intra_labels_full = []
+    pred_inter_labels_full = []
+
+    start_frame_idx_local = 0
+
+    for item in pred_boundary_full:
+
+        end_frame_idx = int(item["end_frame_idx"])
+
+        if end_frame_idx <= start_frame_idx_local:
+            continue
+
+        pred_ranges_full.append(
+            [
+                int(start_frame_idx_local),
+                int(end_frame_idx),
+            ]
+        )
+        pred_intra_labels_full.append(int(item["intra_label"]))
+        pred_inter_labels_full.append(int(item["inter_label"]))
+
+        start_frame_idx_local = end_frame_idx
 
 
     return pred_ranges_full, pred_intra_labels_full, pred_inter_labels_full, video_np_full, fps
@@ -344,10 +337,10 @@ def parse_args():
                             help="Path to save result json."
                         )
     parser.add_argument(
-                            "--num_context_frames",
+                            "--overlap_window_length",
                             type = int,
-                            default = 0,
-                            help = "Number of historical context frames to overlap between each clip window. The default is 100, using 5-10 should be good."
+                            default = 20,
+                            help = "Number of overlapped frames between adjacent inference windows."
                         )
     parser.add_argument(
                             "--visual_store_folder_path",
@@ -390,7 +383,7 @@ if __name__ == '__main__':
 
     # Load Checkpoint & Model Config
     assert(os.path.exists(checkpoint_path))
-    state_dict = torch.load(checkpoint_path, map_location='cpu')
+    state_dict = torch.load(checkpoint_path, map_location='cpu', weights_only=False)
     model_args = state_dict['args']
     print("Checkpoint stored args are", model_args)
 
@@ -417,14 +410,27 @@ if __name__ == '__main__':
 
     # Do the inference
     print("Do the inference!")
-    pred_ranges_full, pred_intra_labels_full, pred_inter_labels_full, video_np_full, fps = single_video_inference(input_video_path, model, model_args, inference_args.num_context_frames)
+    pred_ranges_full, pred_intra_labels_full, pred_inter_labels_full, video_np_full, fps = single_video_inference(
+                                                                                                                    input_video_path,
+                                                                                                                    model,
+                                                                                                                    model_args,
+                                                                                                                    inference_args.overlap_window_length,
+                                                                                                                )
 
 
 
     # Visualize
     if visual_store_folder_path is not None:
         print("Visualize the results!")
-        pred_saved_paths = visualize_concated_frames(video_np_full, visual_store_folder_path, pred_ranges_full, max_frames_per_img=264, end_range_exclusive=True, fps=24, start_index = 0)
+        pred_saved_paths = visualize_concated_frames(
+                                                        video_np_full,
+                                                        visual_store_folder_path,
+                                                        pred_ranges_full,
+                                                        max_frames_per_img=264,
+                                                        end_range_exclusive=True,
+                                                        fps=fps,
+                                                        start_index = 0,
+                                                    )
 
 
 

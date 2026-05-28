@@ -1,18 +1,11 @@
 import os, sys, shutil
-import json
-import glob
-import math
-from pathlib import Path
-from typing import Any, Dict, List, Tuple
-import cv2
-import ffmpeg
-import numpy as np
-import torch
+from typing import List
 import tempfile
 import spaces
+from huggingface_hub import hf_hub_download
 
 # Temp file bug of gradio
-BASE_TMP_DIR = os.path.abspath("./gradio_tmp")
+BASE_TMP_DIR = os.path.abspath("./.gradio_cache")
 os.makedirs(BASE_TMP_DIR, exist_ok=True)
 os.environ["TMPDIR"] = BASE_TMP_DIR
 os.environ["TEMP"] = BASE_TMP_DIR
@@ -25,12 +18,9 @@ import gradio as gr
 # Import your existing project code
 root_path = os.path.abspath(".")
 sys.path.append(root_path)
-from architecture.backbone import build_backbone
-from architecture.transformer import build_transformer
-from architecture.model import OmniShotCut
-from datasets.transforms import Video_Augmentation_Transform
-from util.visualization import visualize_concated_frames
-from config.label_correspondence import unique_intra_label_mapping, unique_inter_label_mapping
+from omnishotcut.datasets.transforms import Video_Augmentation_Transform
+from omnishotcut.util.visualization import visualize_concated_frames
+from omnishotcut.label_correspondence import unique_intra_label_mapping, unique_inter_label_mapping
 from test_code.inference import single_video_inference, load_model
 
 
@@ -45,22 +35,19 @@ INTER_ID2NAME = {v: k for k, v in unique_inter_label_mapping.items()}
 
 # Fixed demo config
 DEFAULT_CHECKPOINT_PATH = "checkpoints/OmniShotCut_ckpt.pth"
-DEFAULT_NUM_CONTEXT_FRAMES = 0
-DEFAULT_MAX_FRAMES_PER_IMG = 132
+DEFAULT_NUM_CONTEXT_FRAMES = 20
+DEFAULT_MAX_FRAMES_PER_IMG = 132            # For the visualization
 VIS_DIR = "demo_video_results"
 
 # Public URL safe setting
 MAX_GALLERY_PAGES = 20
 
 
-# Prepare the checkpoint
-if not os.path.exists(DEFAULT_CHECKPOINT_PATH):
-    os.makedirs("checkpoints", exist_ok=True)
-    os.system("wget -P checkpoints https://huggingface.co/uva-cv-lab/OmniShotCut/resolve/main/OmniShotCut_ckpt.pth")
-
-
-# Load the model
-checkpoint_path = DEFAULT_CHECKPOINT_PATH
+# Prepare the checkpoint — download from HF Hub into local cache if not present
+checkpoint_path = hf_hub_download(
+    repo_id="uva-cv-lab/OmniShotCut",
+    filename="OmniShotCut_ckpt.pth",
+)
 model, model_args = load_model(checkpoint_path)
 
 
@@ -192,7 +179,7 @@ def run_demo(video_file):
                                                                                                     video_path = video_path,
                                                                                                     model = model,
                                                                                                     model_args = model_args,
-                                                                                                    num_context_frames = int(num_context_frames),
+                                                                                                    overlap_window_length = int(num_context_frames),
                                                                                                 )
     print("Finish running the video")
     

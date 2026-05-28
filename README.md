@@ -48,19 +48,8 @@ OmniShotCut can detect shot changes of the video in diverse sources (anime, vlog
 ```shell
 conda create -n OmniShotCut python=3.10
 conda activate OmniShotCut
-pip install torch==2.5.1 torchvision==0.20.1 torchaudio==2.5.1 --index-url https://download.pytorch.org/whl/cu124
 pip install -r requirements.txt
-conda install ffmpeg                #   including conda deactivate case (for debug)
 ```
-
-
-First, let us download the checkpoint
-```shell
-mkdir checkpoints
-cd checkpoints
-wget https://huggingface.co/uva-cv-lab/OmniShotCut/resolve/main/OmniShotCut_ckpt.pth
-```
-
 
 
 
@@ -75,13 +64,22 @@ Click "Running on **public** URL".
 
 
 ## <a name="inference"></a> Inference ⚡
+
+
+First, let us download the checkpoint
+```shell
+mkdir checkpoints
+cd checkpoints
+wget https://huggingface.co/uva-cv-lab/OmniShotCut/resolve/main/OmniShotCut_ckpt.pth
+```
+
 We provide some modes for the inference. 'default' mode will shot the intra and inter label we define.
 However, we believe that most users might want the most direct results, which is the general shots without any transitions. 
 To this end, please use '--mode clean_shot'.
 
 Execute the inference by:
 ```shell
-python test_code/inference.py  --checkpoint_path XXX  --input_video_path XXX  --mode default
+python test_code/inference.py  --checkpoint_path checkpoints/OmniShotCut_ckpt.pth  --input_video_path XXX  --overlap_window_length 20  --mode default
 ```
 We will visualize the results by creating a folder named 'demo_video_results', where vertical bar with the same color refer to the same shot.
 
