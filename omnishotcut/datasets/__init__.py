@@ -1,7 +1,4 @@
 # Copyright (c) Facebook, Inc. and its affiliates. All Rights Reserved
-import torch.utils.data
-import torchvision
-
 from .dataloader import build as build_cut_anything
 
 

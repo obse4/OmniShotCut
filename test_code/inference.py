@@ -4,15 +4,10 @@
 import os, sys, shutil
 import argparse
 import numpy as np
-import math
-import subprocess
-import cv2
 import copy
 from decord import VideoReader, cpu as decord_cpu
 import json
 import torch
-import torchvision.transforms as T
-from torch.utils.data import DataLoader
 import warnings
 warnings.filterwarnings("ignore", category=UserWarning)
 
@@ -20,13 +15,12 @@ warnings.filterwarnings("ignore", category=UserWarning)
 # Import files from the local folder
 root_path = os.path.abspath('.')
 sys.path.append(root_path)
-from config.argument_setting import get_args_parser
-from architecture.backbone import build_backbone
-from architecture.transformer import build_transformer
-from architecture.model import OmniShotCut
-from datasets.transforms import Video_Augmentation_Transform
-from util.visualization import visualize_concated_frames
-from config.label_correspondence import unique_intra_label_mapping, unique_inter_label_mapping, intra_int2string, inter_int2string
+from omnishotcut.architecture.backbone import build_backbone
+from omnishotcut.architecture.transformer import build_transformer
+from omnishotcut.architecture.model import OmniShotCut
+from omnishotcut.datasets.transforms import Video_Augmentation_Transform
+from omnishotcut.util.visualization import visualize_concated_frames
+from omnishotcut.config.label_correspondence import unique_intra_label_mapping, unique_inter_label_mapping, intra_int2string, inter_int2string
 
 
 # Video Transform
@@ -69,19 +63,6 @@ def load_model(checkpoint_path: str):
 
 
     return model, model_args
-
-
-
-def get_video_fps_safe(video_path: str, default_fps: float = 24.0) -> float:
-    try:
-        cap = cv2.VideoCapture(video_path)
-        fps = cap.get(cv2.CAP_PROP_FPS)
-        cap.release()
-        if fps is None or fps <= 1e-6 or math.isnan(fps):
-            return default_fps
-        return float(fps)
-    except Exception:
-        return default_fps
 
 
 
@@ -402,7 +383,7 @@ if __name__ == '__main__':
 
     # Load Checkpoint & Model Config
     assert(os.path.exists(checkpoint_path))
-    state_dict = torch.load(checkpoint_path, map_location='cpu')
+    state_dict = torch.load(checkpoint_path, map_location='cpu', weights_only=False)
     model_args = state_dict['args']
     print("Checkpoint stored args are", model_args)
 

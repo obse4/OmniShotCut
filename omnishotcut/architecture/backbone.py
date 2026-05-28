@@ -2,8 +2,6 @@
 """
     Backbone modules. From DETR.
 """
-from collections import OrderedDict
-
 import torch
 import torch.nn.functional as F
 import torchvision
@@ -13,7 +11,7 @@ from typing import Dict, List
 
 
 # IMport files from the local folder
-from util.misc import NestedTensor, is_main_process
+from ..util.misc import NestedTensor, is_main_process
 from .position_encoding import build_position_encoding
 
 

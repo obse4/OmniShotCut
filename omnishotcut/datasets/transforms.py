@@ -1,15 +1,8 @@
-import os, sys, shutil
 import random
 from typing import List, Union, Optional, Tuple
-from pathlib import Path
 import numpy as np
 import torch
-import torch.utils.data
-import imageio
-import torchvision
 import torchvision.transforms.functional as F
-from torchvision.transforms import InterpolationMode
-from torch.utils.data import Dataset
 from PIL import Image
 PILImage = Image.Image
 
@@ -35,73 +28,6 @@ def _to_4d_video_tensor(frames_np):
     return frames
 
 
-
-
-
-def save_video_mp4(
-    video: torch.Tensor,
-    path: str = "video.mp4",
-    fps: int = 24,
-    mean=(0.485, 0.456, 0.406),
-    std=(0.229, 0.224, 0.225),
-    assume_normalized: bool | None = None,  # None=auto-detect; True/False=force
-):
-    """
-    Save torch video tensor to mp4.
-
-    Accepts:
-      - [T, C, H, W] float tensor
-      - [B, T, C, H, W] float tensor (will use first sample)
-    It will auto unnormalize (ImageNet) if it detects normalized inputs.
-
-    Output:
-      - mp4 with uint8 frames [T, H, W, 3]
-    """
-
-    if not torch.is_tensor(video):
-        raise TypeError(f"video must be torch.Tensor, got {type(video)}")
-
-    v = video.detach().cpu()
-
-    # Handle [B, T, C, H, W]
-    if v.ndim == 5:
-        v = v[0]
-    if v.ndim != 4:
-        raise ValueError(f"Expected [T,C,H,W] (or [B,T,C,H,W]), got shape {tuple(v.shape)}")
-
-    T, C, H, W = v.shape
-    if C not in (1, 3):
-        raise ValueError(f"Expected C=1 or 3, got C={C}")
-
-    v = v.to(torch.float32)
-
-    # ---- Decide whether to unnormalize ----
-    # Heuristic: normalized ImageNet tensors often have values outside [0,1]
-    # (e.g., negative or >1). Raw unnormalized typically stays in [0,1].
-    if assume_normalized is None:
-        minv = float(v.min())
-        maxv = float(v.max())
-        is_normalized = (minv < -0.05) or (maxv > 1.05)
-    else:
-        is_normalized = bool(assume_normalized)
-
-    if is_normalized:
-        mean_t = torch.tensor(mean, dtype=v.dtype).view(1, 3, 1, 1)
-        std_t  = torch.tensor(std,  dtype=v.dtype).view(1, 3, 1, 1)
-        if C == 1:
-            v = v.repeat(1, 3, 1, 1)
-            C = 3
-        v = v * std_t + mean_t  # unnormalize back to roughly [0,1]
-
-    # Clamp to valid range and convert to uint8
-    v = v.clamp(0.0, 1.0)
-    v = (v * 255.0).round().to(torch.uint8)
-
-    # [T, C, H, W] -> [T, H, W, C]
-    v = v.permute(0, 2, 3, 1).contiguous().numpy()
-
-    imageio.mimsave(path, v, fps=fps)
-    # print("Save video at", path)
 
 
 
@@ -215,14 +141,14 @@ class Video_Augmentation_Transform:
     def _add_compression(self, img, compression_choice):
 
         if compression_choice == "jpeg":
-            from datasets.compression_utils import jpeg_compress_tensor
+            from .compression_utils import jpeg_compress_tensor
 
             # compress
             jpeg_compress_tensor(img)
             compressed_img = jpeg_compress_tensor(img)
             
         elif compression_choice == "webp":
-            from datasets.compression_utils import webp_compress_tensor
+            from .compression_utils import webp_compress_tensor
 
             # compress
             compressed_img = webp_compress_tensor(img)

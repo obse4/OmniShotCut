@@ -9,10 +9,10 @@ from torch import nn
 
 # Import files from the local fodler
 # from util import box_ops
-from util.misc import NestedTensor
+from ..util.misc import NestedTensor
 from .backbone import build_backbone
 from .transformer import build_transformer
-from datasets.utils import nested_tensor_from_tensor_list
+from ..datasets.utils import nested_tensor_from_tensor_list
 
 
 

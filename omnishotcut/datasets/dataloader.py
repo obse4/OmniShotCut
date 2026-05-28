@@ -3,27 +3,19 @@
     Data Loader for OmniShotCut. Modified from DETR.
 """
 
-import os, sys, shutil
+import os
 import random
 from typing import List, Union, Optional, Tuple
-from pathlib import Path
 import numpy as np
 from decord import VideoReader, cpu as decord_cpu
 import torch
-import torch.utils.data
-import imageio
-import torchvision
 import torch.nn.functional as F
 from torch.utils.data import Dataset
-from PIL import Image
 
 
-# Import files from the local folder
-root_path = os.path.abspath('.')
-sys.path.append(root_path)
-from datasets.transforms import Video_Augmentation_Transform
-from config.label_correspondence import unique_intra_label_mapping, unique_inter_label_mapping
-from util.visualization import visualize_concated_frames
+from .transforms import Video_Augmentation_Transform
+from ..config.label_correspondence import unique_intra_label_mapping, unique_inter_label_mapping
+from ..util.visualization import visualize_concated_frames
 
 
 

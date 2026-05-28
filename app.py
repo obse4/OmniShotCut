@@ -1,12 +1,5 @@
 import os, sys, shutil
-import json
-import glob
-import math
-from pathlib import Path
-from typing import Any, Dict, List, Tuple
-import cv2
-import numpy as np
-import torch
+from typing import List
 import tempfile
 import spaces
 from huggingface_hub import hf_hub_download
@@ -25,12 +18,9 @@ import gradio as gr
 # Import your existing project code
 root_path = os.path.abspath(".")
 sys.path.append(root_path)
-from architecture.backbone import build_backbone
-from architecture.transformer import build_transformer
-from architecture.model import OmniShotCut
-from datasets.transforms import Video_Augmentation_Transform
-from util.visualization import visualize_concated_frames
-from config.label_correspondence import unique_intra_label_mapping, unique_inter_label_mapping
+from omnishotcut.datasets.transforms import Video_Augmentation_Transform
+from omnishotcut.util.visualization import visualize_concated_frames
+from omnishotcut.config.label_correspondence import unique_intra_label_mapping, unique_inter_label_mapping
 from test_code.inference import single_video_inference, load_model
 
 
