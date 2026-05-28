@@ -20,7 +20,7 @@ from omnishotcut.architecture.transformer import build_transformer
 from omnishotcut.architecture.model import OmniShotCut
 from omnishotcut.datasets.transforms import Video_Augmentation_Transform
 from omnishotcut.util.visualization import visualize_concated_frames
-from omnishotcut.config.label_correspondence import unique_intra_label_mapping, unique_inter_label_mapping, intra_int2string, inter_int2string
+from omnishotcut.label_correspondence import unique_intra_label_mapping, unique_inter_label_mapping, intra_int2string, inter_int2string
 
 
 # Video Transform

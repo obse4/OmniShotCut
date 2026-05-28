@@ -20,7 +20,7 @@ root_path = os.path.abspath(".")
 sys.path.append(root_path)
 from omnishotcut.datasets.transforms import Video_Augmentation_Transform
 from omnishotcut.util.visualization import visualize_concated_frames
-from omnishotcut.config.label_correspondence import unique_intra_label_mapping, unique_inter_label_mapping
+from omnishotcut.label_correspondence import unique_intra_label_mapping, unique_inter_label_mapping
 from test_code.inference import single_video_inference, load_model
 
 

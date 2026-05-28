@@ -14,7 +14,7 @@ from torch.utils.data import Dataset
 
 
 from .transforms import Video_Augmentation_Transform
-from ..config.label_correspondence import unique_intra_label_mapping, unique_inter_label_mapping
+from ..label_correspondence import unique_intra_label_mapping, unique_inter_label_mapping
 from ..util.visualization import visualize_concated_frames
 
 
