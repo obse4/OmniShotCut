@@ -12,7 +12,7 @@ import spaces
 from huggingface_hub import hf_hub_download
 
 # Temp file bug of gradio
-BASE_TMP_DIR = os.path.abspath("./gradio_tmp")
+BASE_TMP_DIR = os.path.abspath("./.gradio_cache")
 os.makedirs(BASE_TMP_DIR, exist_ok=True)
 os.environ["TMPDIR"] = BASE_TMP_DIR
 os.environ["TEMP"] = BASE_TMP_DIR
@@ -45,8 +45,8 @@ INTER_ID2NAME = {v: k for k, v in unique_inter_label_mapping.items()}
 
 # Fixed demo config
 DEFAULT_CHECKPOINT_PATH = "checkpoints/OmniShotCut_ckpt.pth"
-DEFAULT_NUM_CONTEXT_FRAMES = 0
-DEFAULT_MAX_FRAMES_PER_IMG = 132
+DEFAULT_NUM_CONTEXT_FRAMES = 20
+DEFAULT_MAX_FRAMES_PER_IMG = 132            # For the visualization
 VIS_DIR = "demo_video_results"
 
 # Public URL safe setting
