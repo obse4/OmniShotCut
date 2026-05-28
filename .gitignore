@@ -26,6 +26,7 @@ data_embedding/*
 cut_anything_dataset/*
 runs/*
 gradio_tmp/*
+.gradio_cache/*
 
 # Don't Ignore something
 !requirements.txt

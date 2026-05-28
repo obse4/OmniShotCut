@@ -7,6 +7,9 @@ from huggingface_hub import hf_hub_download
 from huggingface_hub.utils import enable_progress_bars
 
 logger = logging.getLogger(__name__)
+logger.setLevel(logging.INFO)
+if not logger.handlers:
+    logger.addHandler(logging.StreamHandler())
 
 from omnishotcut.engine import load_model, _run_on_numpy
 from omnishotcut.label_correspondence import unique_intra_label_mapping, intra_int2string, inter_int2string
