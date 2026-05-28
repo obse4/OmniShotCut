@@ -46,6 +46,16 @@ OmniShotCut can detect shot changes of the video in diverse sources (anime, vlog
 
 
 ## <a name="Installation"></a> Installation 🔧
+
+**Option 1: pip install from GitHub (recommended for users)**
+
+First install PyTorch with CUDA support.
+Then install OmniShotCut:
+```shell
+pip install git+https://github.com/UVA-Computer-Vision-Lab/OmniShotCut.git
+```
+
+**Option 2: Local development install**
 ```shell
 conda create -n OmniShotCut python=3.10
 conda activate OmniShotCut

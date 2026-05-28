@@ -13,6 +13,8 @@ dependencies = [
     "decord",
     "opencv-python",
     "huggingface_hub",
+    "Pillow",
+    "packaging",
 ]
 
 [tool.setuptools.packages.find]
