@@ -5,7 +5,6 @@ import os, sys, shutil
 import argparse
 import numpy as np
 import copy
-from decord import VideoReader, cpu as decord_cpu
 import json
 import torch
 import warnings
@@ -19,6 +18,7 @@ from omnishotcut.architecture.backbone import build_backbone
 from omnishotcut.architecture.transformer import build_transformer
 from omnishotcut.architecture.model import OmniShotCut
 from omnishotcut.datasets.transforms import Video_Augmentation_Transform
+from omnishotcut.datasets.utils import _decode_video, _video_fps
 from omnishotcut.util.visualization import visualize_concated_frames
 from omnishotcut.label_correspondence import unique_intra_label_mapping, unique_inter_label_mapping, intra_int2string, inter_int2string
 
@@ -156,9 +156,8 @@ def single_video_inference(video_path, model, model_args, overlap_window_length)
 
 
     # Read the Video
-    vr = VideoReader(video_path, ctx=decord_cpu(0), width=process_width, height=process_height)
-    fps = vr.get_avg_fps()
-    video_np_full = vr[:].asnumpy()  # (T, H, W, 3), RGB
+    video_np_full = _decode_video(video_path, process_width, process_height)
+    fps = _video_fps(video_path)
     
 
     # Iterate all the clips
@@ -241,7 +240,7 @@ def single_video_inference(video_path, model, model_args, overlap_window_length)
 
     for item in pred_boundary_full:
 
-        end_frame_idx = int(item["end_frame_idx"])
+        end_frame_idx = min(int(item["end_frame_idx"]), len(video_np_full))
 
         if end_frame_idx <= start_frame_idx_local:
             continue
@@ -322,7 +321,7 @@ def _run_on_numpy(video_np, model, model_args, overlap_window_length):
     start_frame_idx = 0
 
     for item in pred_boundary_full:
-        end_frame_idx = int(item["end_frame_idx"])
+        end_frame_idx = min(int(item["end_frame_idx"]), len(video_np))
         if end_frame_idx <= start_frame_idx:
             continue
         pred_ranges.append([int(start_frame_idx), int(end_frame_idx)])

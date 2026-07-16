@@ -48,7 +48,8 @@ OmniShotCut can detect shot changes of the video in diverse sources (anime, vlog
 
 ## <a name="quick_start"></a> Quick Start 🐍
 
-First install PyTorch with CUDA support.
+First install PyTorch with CUDA support, and make sure a working `ffmpeg` binary is
+on your `PATH` (used for video decoding; e.g. `conda install -c conda-forge ffmpeg`).
 Then install OmniShotCut:
 ```shell
 pip install git+https://github.com/UVA-Computer-Vision-Lab/OmniShotCut.git
@@ -74,9 +75,11 @@ Use `mode="default"` to also get dissolves, wipes, and fades with their labels:
 ranges, intra_labels, inter_labels = cut_model.inference("video.mp4", mode="default")
 ```
 
-Besides video file paths, `inference()` also accepts **numpy** arrays and **torch** tensors directly — both should be `(T, H, W, 3)` uint8 RGB:
+Besides video file paths, `inference()` also accepts **numpy** arrays and **torch** tensors directly — both `(T, H, W, 3)` RGB (either `uint8`, or float in `[0, 1]`). The input H/W can be arbitrary; frames are resized to the model's process resolution automatically, so results match the video-file path:
 
-
+```python
+ranges = cut_model.inference(frames_thwc, mode="clean_shot")  # frames_thwc: (T, H, W, 3)
+```
 
 
 
@@ -84,9 +87,14 @@ Besides video file paths, `inference()` also accepts **numpy** arrays and **torc
 ```shell
 conda create -n OmniShotCut python=3.10
 conda activate OmniShotCut
+conda install -c conda-forge ffmpeg   # required: frame-accurate video decoding backend
 pip install -r requirements.txt
 pip install -e .
 ```
+
+> **Note:** video decoding uses `ffmpeg` (via `ffmpeg-python`), so a working `ffmpeg`
+> binary must be on your `PATH`. Installing it from `conda-forge` as above is the
+> most reliable way to get one with all shared libraries present.
 
 
 ## <a name="fast_inference"></a> Gradio Demo ⚡⚡⚡

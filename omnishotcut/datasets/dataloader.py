@@ -7,7 +7,7 @@ import os
 import random
 from typing import List, Union, Optional, Tuple
 import numpy as np
-from decord import VideoReader, cpu as decord_cpu
+from omnishotcut.datasets.utils import _decode_video
 import torch
 import torch.nn.functional as F
 from torch.utils.data import Dataset
@@ -162,9 +162,7 @@ class CutAnything_Dataloader(Dataset):
 
                 ############################################################ Construct the Video Inputs #########################################################################
 
-                # Read the video by decord
-                vr = VideoReader(video_path, ctx=decord_cpu(0), width=self.process_width, height=self.process_height)
-                video_np_full = vr[:].asnumpy()     # shape: (N, H, W, 3), uint8, RGB
+                video_np_full = _decode_video(video_path, self.process_width, self.process_height)
                 original_num_frames = len(video_np_full)
                 if original_num_frames < self.max_process_window_length:
                     print("We only has", original_num_frames, "number of frames!")

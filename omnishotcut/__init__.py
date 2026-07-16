@@ -2,7 +2,6 @@ import logging
 import os
 import numpy as np
 import torch
-from decord import VideoReader, cpu as decord_cpu
 from huggingface_hub import hf_hub_download
 from huggingface_hub.utils import enable_progress_bars
 
@@ -12,6 +11,7 @@ if not logger.handlers:
     logger.addHandler(logging.StreamHandler())
 
 from omnishotcut.engine import load_model, _run_on_numpy
+from omnishotcut.datasets.utils import _decode_video, _resize_video
 from omnishotcut.label_correspondence import unique_intra_label_mapping, intra_int2string, inter_int2string
 
 
@@ -28,7 +28,11 @@ class OmniShotCutModel:
         """Run shot cut detection on a video.
 
         Args:
-            video: str file path | np.ndarray (T,H,W,3) uint8 RGB | torch.Tensor (T,H,W,3)
+            video: str file path | np.ndarray (T,H,W,3) RGB | torch.Tensor (T,H,W,3) RGB.
+                   Any input is resized to the model's process resolution
+                   (process_width x process_height, e.g. 128x96) before inference,
+                   so the input H/W can be arbitrary. Non-uint8 arrays/tensors are
+                   treated as float in [0, 1].
             mode: "clean_shot" — general cuts only (no transitions)
                   "default"    — all detected shots with full labels
             overlap: number of overlap frames between adjacent inference windows
@@ -39,9 +43,7 @@ class OmniShotCutModel:
             inter_labels: list of int (0=New_Start, 1=Hard_Cut, 2=Transition_Source, ...)
         """
         if isinstance(video, str):
-            h, w = self._model_args.process_height, self._model_args.process_width
-            vr = VideoReader(video, ctx=decord_cpu(0), width=w, height=h)
-            video_np = vr[:].asnumpy()
+            video_np = _decode_video(video, self._model_args.process_width, self._model_args.process_height)
         elif isinstance(video, torch.Tensor):
             if video.ndim != 4 or video.shape[-1] != 3:
                 raise ValueError(f"Tensor must be (T, H, W, 3), got {tuple(video.shape)}")
@@ -58,6 +60,8 @@ class OmniShotCutModel:
                 if video_np.min() < 0.0 or video_np.max() > 1.0:
                     raise ValueError(f"Float array must be in [0, 1], got range [{video_np.min():.3f}, {video_np.max():.3f}]")
                 video_np = (video_np * 255).astype(np.uint8)
+
+        video_np = _resize_video(video_np, self._model_args.process_width, self._model_args.process_height)
 
         ranges, intra_labels, inter_labels = _run_on_numpy(video_np, self._model, self._model_args, overlap)
 

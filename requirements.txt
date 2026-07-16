@@ -3,8 +3,8 @@ torchvision
 pandas
 tqdm
 opencv-python
-numpy>=1.26       
-decord
+numpy>=1.26
+ffmpeg-python
 scikit-learn
 matplotlib
 imageio

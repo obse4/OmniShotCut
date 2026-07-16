@@ -2,10 +2,47 @@
     Util for collate function and related needs
 '''
 from typing import Optional, List
+from fractions import Fraction
+import numpy as np
+import cv2
+import ffmpeg
 import torch
 from torch import Tensor
 
 from ..util.misc import NestedTensor
+
+
+def _decode_video(path, width, height):
+    try:
+        stream, _ = (
+            ffmpeg.input(path)
+            .output("pipe:", format="rawvideo", pix_fmt="rgb24", s=f"{width}x{height}", vsync="passthrough")
+            .run(capture_stdout=True, capture_stderr=True)
+        )
+    except ffmpeg.Error as e:
+        raise RuntimeError(f"ffmpeg failed to decode: {path}\n{e.stderr.decode('utf-8', 'ignore') if e.stderr else ''}") from e
+    video_np = np.frombuffer(stream, np.uint8).reshape(-1, height, width, 3)
+    if len(video_np) == 0:
+        raise ValueError(f"decoded 0 frames: {path}")
+    return video_np
+
+
+def _video_fps(path):
+    s = next(x for x in ffmpeg.probe(path)["streams"] if x["codec_type"] == "video")
+    r = s.get("avg_frame_rate", "0/0")
+    if r in ("0/0", "0"):
+        r = s.get("r_frame_rate", "0/1")
+    return float(Fraction(r))
+
+
+def _resize_video(video_np, width, height):
+    """Resize (T, H, W, 3) uint8 to (T, height, width, 3). No-op if already that size."""
+    if video_np.shape[1] == height and video_np.shape[2] == width:
+        return video_np
+    out = np.empty((video_np.shape[0], height, width, 3), dtype=np.uint8)
+    for i in range(video_np.shape[0]):
+        out[i] = cv2.resize(video_np[i], (width, height), interpolation=cv2.INTER_AREA)
+    return out
 
 
 

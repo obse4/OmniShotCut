@@ -10,7 +10,7 @@ dependencies = [
     "torch>=2.0",
     "torchvision",
     "numpy>=1.26",
-    "decord",
+    "ffmpeg-python",
     "opencv-python",
     "huggingface_hub",
     "Pillow",
