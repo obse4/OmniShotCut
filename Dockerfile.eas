@@ -1,0 +1,28 @@
+FROM nvidia/cuda:12.1.1-cudnn8-runtime-ubuntu22.04
+
+ENV DEBIAN_FRONTEND=noninteractive \
+    PYTHONUNBUFFERED=1 \
+    PIP_NO_CACHE_DIR=1 \
+    OMNISHOTCUT_CHECKPOINT=/app/checkpoints/OmniShotCut_ckpt.pth
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+        ca-certificates ffmpeg python3 python3-pip wget \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /app
+COPY requirements.txt pyproject.toml README.md ./
+COPY omnishotcut ./omnishotcut
+RUN python3 -m pip install --upgrade pip \
+    && python3 -m pip install --index-url https://download.pytorch.org/whl/cu121 \
+        torch torchvision \
+    && python3 -m pip install -r requirements.txt
+
+RUN mkdir -p checkpoints \
+    && wget -O checkpoints/OmniShotCut_ckpt.pth \
+        https://hf-mirror.com/uva-cv-lab/OmniShotCut/resolve/main/OmniShotCut_ckpt.pth \
+    && echo "5948ea78e00626c0e6c5e742e64873ef872cf4a5071d2a0841aed51c3e686cfa  checkpoints/OmniShotCut_ckpt.pth" \
+        | sha256sum -c -
+COPY eas_api.py ./
+
+EXPOSE 8080
+CMD ["uvicorn", "eas_api:app", "--host", "0.0.0.0", "--port", "8080", "--workers", "1"]
