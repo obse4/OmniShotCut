@@ -2,6 +2,7 @@ import ipaddress
 import os
 import socket
 import tempfile
+import threading
 from pathlib import Path
 from typing import Annotated
 from urllib.parse import urlparse
@@ -26,11 +27,23 @@ CONTEXT_FRAMES = int(os.environ.get("OMNISHOTCUT_CONTEXT_FRAMES", "20"))
 if not Path(CHECKPOINT_PATH).is_file():
     raise RuntimeError(f"Checkpoint not found: {CHECKPOINT_PATH}")
 
-MODEL, MODEL_ARGS = load_model(CHECKPOINT_PATH)
+MODEL = None
+MODEL_ARGS = None
+MODEL_LOCK = threading.Lock()
 INTRA_ID2NAME = {value: key for key, value in unique_intra_label_mapping.items()}
 INTER_ID2NAME = {value: key for key, value in unique_inter_label_mapping.items()}
 
 app = FastAPI(title="OmniShotCut EAS API", version="1.0.0")
+
+
+def _ensure_model():
+    global MODEL, MODEL_ARGS
+
+    if MODEL is None:
+        with MODEL_LOCK:
+            if MODEL is None:
+                MODEL, MODEL_ARGS = load_model(CHECKPOINT_PATH)
+    return MODEL, MODEL_ARGS
 
 
 def _validate_public_https_url(value: str) -> str:
@@ -82,10 +95,11 @@ async def _download_video(url: str, destination: Path) -> None:
 
 
 def _result(video_path: Path) -> dict:
+    model, model_args = _ensure_model()
     ranges, intra_labels, inter_labels, _, fps = single_video_inference(
         video_path=str(video_path),
-        model=MODEL,
-        model_args=MODEL_ARGS,
+        model=model,
+        model_args=model_args,
         overlap_window_length=CONTEXT_FRAMES,
     )
     return {
@@ -110,7 +124,7 @@ def _result(video_path: Path) -> dict:
 
 @app.get("/health")
 def health() -> dict:
-    return {"status": "ok", "model_loaded": True}
+    return {"status": "ok", "model_loaded": MODEL is not None}
 
 
 @app.post("/predict")
